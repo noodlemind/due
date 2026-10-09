@@ -267,16 +267,25 @@
     overflow: auto;
   }
   .suggest button {
-    display: block;
+    display: flex;
+    align-items: center;
     width: 100%;
     text-align: left;
-    padding: 10px 12px;
+    min-height: 44px;
+    padding: 0 14px;
     font-family: var(--serif);
     font-size: 18px;
   }
   .suggest button[aria-selected="true"], .suggest button:hover {
     background: var(--ink);
     color: var(--paper);
+  }
+  .miss {
+    min-height: 18px;
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--late);
   }
   .row-actions { display: flex; gap: 18px; align-items: center; margin-top: 16px; }
   .go {
@@ -355,6 +364,7 @@ const state = {
   routes: load(),
   active: 0,
   composing: false,
+  editing: false,
   cache: {},
   places: {},
   picked: null,
@@ -469,13 +479,13 @@ function renderIndex() {
     const b = document.createElement("button");
     b.className = i === state.active && !state.composing ? "on" : "";
     b.innerHTML = '<span class="fromto">' + esc(shortStation(r.from)) + " → " + esc(shortStation(r.to)) + '</span>';
-    b.onclick = () => { state.composing = false; state.picked = null; state.active = i; render(); refreshOne(r); };
+    b.onclick = () => { state.composing = false; state.editing = false; state.picked = null; state.active = i; render(); refreshOne(r); };
     nav.appendChild(b);
   });
   const add = document.createElement("button");
   add.className = "add" + (state.composing ? " on" : "");
   add.textContent = "Add a route";
-  add.onclick = () => { state.composing = true; render(); };
+  add.onclick = () => { state.composing = true; state.editing = false; render(); };
   nav.appendChild(add);
 }
 function placeFor(train) {
@@ -498,8 +508,11 @@ function chosen(trips) {
 function renderStage() {
   const stage = document.getElementById("stage");
   if (state.composing || !state.routes.length) {
-    stage.innerHTML = composerHTML(null);
-    wireComposer(null);
+    if (!stage.querySelector("#composer")) {
+      const existing = state.editing ? state.routes[state.active] : null;
+      stage.innerHTML = composerHTML(existing);
+      wireComposer(existing);
+    }
     return;
   }
   const route = state.routes[state.active];
@@ -570,6 +583,7 @@ function composerHTML(route) {
       <div class="field"><input id="from" name="from" autocomplete="off" placeholder="From" value="${esc(from)}" /></div>
       <label for="to">To</label>
       <div class="field"><input id="to" name="to" autocomplete="off" placeholder="To" value="${esc(to)}" /></div>
+      <p class="miss" id="miss" role="status"></p>
       <div class="row-actions">
         <button class="go" id="go" type="submit">Show trains</button>
         ${route || state.routes.length ? '<button class="texty" id="cancel" type="button">Cancel</button>' : ""}
@@ -585,20 +599,19 @@ function wireSwap() {
     save(); render(); refreshOne(r);
   };
   const add = document.getElementById("add");
-  if (add) add.onclick = () => { state.composing = true; render(); };
+  if (add) add.onclick = () => { state.composing = true; state.editing = false; render(); };
   const edit = document.getElementById("edit");
   if (edit) edit.onclick = () => {
-    const stage = document.getElementById("stage");
-    const route = state.routes[state.active];
-    stage.innerHTML = composerHTML(route);
-    document.getElementById("later").innerHTML = "";
-    wireComposer(route);
+    state.composing = true;
+    state.editing = true;
+    render();
   };
   const drop = document.getElementById("drop");
   if (drop) drop.onclick = () => {
     state.routes.splice(state.active, 1);
     state.active = Math.max(0, state.active - 1);
     save();
+    state.editing = false;
     if (!state.routes.length) state.composing = true;
     render();
   };
@@ -612,7 +625,10 @@ function wireComposer(existing) {
   form.onsubmit = (e) => {
     e.preventDefault();
     const a = canon(from.value), b = canon(to.value);
-    if (!a || !b || a === b) return;
+    const miss = document.getElementById("miss");
+    if (!a || !b) { miss.textContent = "Not a station."; return; }
+    if (a === b) { miss.textContent = "Pick two stations."; return; }
+    miss.textContent = "";
     if (existing) {
       existing.from = a; existing.to = b;
     } else {
@@ -620,21 +636,50 @@ function wireComposer(existing) {
       state.active = state.routes.length - 1;
     }
     state.composing = false;
+    state.editing = false;
     save();
     render();
     refreshOne(state.routes[state.active]);
   };
   const cancel = document.getElementById("cancel");
-  if (cancel) cancel.onclick = () => { state.composing = false; render(); };
+  if (cancel) cancel.onclick = () => { state.composing = false; state.editing = false; render(); };
   from.focus();
+}
+function fold(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 function canon(v) {
   const q = v.trim().toLowerCase();
   return STATIONS.find(s => s.toLowerCase() === q) || null;
 }
+function stationMatches(q) {
+  const query = fold(q);
+  if (!query) return [];
+  const tokens = query.split(" ");
+  const prefix = [];
+  const sub = [];
+  for (const name of STATIONS) {
+    const folded = fold(name);
+    const words = folded.split(" ");
+    if (tokens.every(t => words.some(w => w.startsWith(t)))) prefix.push(name);
+    else if (folded.includes(query)) sub.push(name);
+  }
+  return prefix.concat(sub).slice(0, 6);
+}
+function focusNext(input) {
+  if (input.id === "from") document.getElementById("to").focus();
+  else document.getElementById("go").focus();
+}
 function attachSuggest(input) {
   let box = null, sel = 0, items = [];
   function close() { if (box) { box.remove(); box = null; } }
+  function choose(name) {
+    input.value = name;
+    close();
+    const miss = document.getElementById("miss");
+    if (miss) miss.textContent = "";
+    focusNext(input);
+  }
   function open(list) {
     close();
     if (!list.length) return;
@@ -646,8 +691,10 @@ function attachSuggest(input) {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = name;
+      b.setAttribute("role", "option");
       b.setAttribute("aria-selected", i === 0 ? "true" : "false");
-      b.onmousedown = (e) => { e.preventDefault(); input.value = name; close(); };
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => choose(name));
       box.appendChild(b);
     });
     input.parentElement.appendChild(box);
@@ -659,17 +706,17 @@ function attachSuggest(input) {
     box.children[sel].scrollIntoView({ block: "nearest" });
   }
   input.addEventListener("input", () => {
-    const q = input.value.trim().toLowerCase();
-    if (q.length < 1) { close(); return; }
-    open(STATIONS.filter(s => s.toLowerCase().includes(q)).slice(0, 6));
+    const q = input.value.trim();
+    if (!q) { close(); return; }
+    open(stationMatches(q));
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
-    else if (e.key === "Enter" && box) { e.preventDefault(); input.value = items[sel]; close(); }
+    else if (e.key === "Enter" && box) { e.preventDefault(); choose(items[sel]); }
     else if (e.key === "Escape") close();
   });
-  input.addEventListener("blur", () => setTimeout(close, 120));
+  input.addEventListener("blur", () => setTimeout(close, 180));
 }
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
