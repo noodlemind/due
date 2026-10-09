@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f3f0ea" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Due" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/icon.svg" />
+<title>Due</title>
+<style>
+  :root {
+    --paper: #f3f0ea;
+    --ink: #1c1b19;
+    --mute: #8a847b;
+    --faint: #b7b1a7;
+    --rule: #ddd6cc;
+    --late: #9c341f;
+    --plate: #1c1b19;
+    --plate-ink: #f3f0ea;
+    --shadow: 0 1px 0 rgba(28, 27, 25, 0.04);
+    --sans: "Instrument Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --serif: "Instrument Serif", "Iowan Old Style", Palatino, serif;
+    --pad: 24px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 400;
+    font-size: 15px;
+    line-height: 1.4;
+    letter-spacing: -0.011em;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; padding: 0; cursor: pointer; }
+  button:focus-visible, input:focus-visible {
+    outline: 1px solid var(--ink);
+    outline-offset: 3px;
+  }
+  .sheet {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: calc(18px + env(safe-area-inset-top)) var(--pad) calc(48px + env(safe-area-inset-bottom));
+    min-height: 100dvh;
+  }
+  header.mast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 18px;
+  }
+  .mark {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .live { font-size: 12px; color: var(--late); letter-spacing: 0.04em; }
+  .live i { display: none; }
+  .live.stale i {
+    display: inline-block;
+    width: 4px; height: 4px;
+    background: var(--late);
+    margin-right: 7px;
+    transform: translateY(-1px);
+  }
+  .index {
+    display: flex;
+    gap: 0;
+    margin: 14px calc(var(--pad) * -1) 0;
+    padding: 0 var(--pad);
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--rule);
+  }
+  .index.solo { display: none; }
+  .index::-webkit-scrollbar { display: none; }
+  .index button {
+    flex: 0 0 auto;
+    text-align: left;
+    padding: 14px 22px 13px 0;
+    margin-right: 22px;
+    border-bottom: 1px solid transparent;
+    margin-bottom: -1px;
+    color: var(--mute);
+    max-width: 240px;
+  }
+  .index button.on { color: var(--ink); border-bottom-color: var(--ink); }
+  .index .fromto {
+    display: block;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .index .sub {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .index button.on .sub { color: var(--mute); }
+  .index .add {
+    color: var(--ink);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 500;
+    align-self: center;
+    padding: 14px 0;
+    margin-right: 0;
+  }
+  .spread {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.75fr);
+    gap: 72px;
+    padding-top: 36px;
+  }
+  @media (max-width: 800px) {
+    .spread { grid-template-columns: 1fr; gap: 36px; padding-top: 36px; }
+  }
+  .kicker { display: none; }
+  .route-lang { display: none; }
+  .stations {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-top: 22px;
+  }
+  .stations .to { display: block; font-style: italic; color: var(--ink); }
+  .stations .to::before { content: "to "; font-style: italic; color: var(--mute); }
+  .object {
+    display: grid;
+    grid-template-columns: auto auto auto;
+    justify-content: start;
+    gap: 10px 14px;
+    align-items: end;
+  }
+  .minute {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    font-size: clamp(112px, 28vw, 132px);
+    line-height: 0.8;
+    letter-spacing: -0.065em;
+  }
+  .minute.gone { color: var(--ink); }
+  .unit { align-self: end; padding-bottom: 12px; font-size: 13px; color: var(--mute); }
+  .plate {
+    align-self: end;
+    margin-bottom: 12px;
+    background: var(--plate);
+    color: var(--plate-ink);
+    padding: 4px 7px 3px;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .line-name {
+    margin-top: 18px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+  .where {
+    margin-top: 6px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--mute);
+    line-height: 1.3;
+  }
+  .facts { margin-top: 16px; font-variant-numeric: tabular-nums; font-size: 15px; }
+  .facts .late { color: var(--late); }
+  .facts .sep { color: var(--faint); padding: 0 6px; }
+  .change {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--mute);
+    font-style: italic;
+    font-family: var(--serif);
+  }
+  .empty-object { margin-top: 48px; max-width: 420px; }
+  .empty-object p {
+    font-family: var(--serif);
+    font-size: 28px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+  .empty-object small { color: var(--mute); font-size: 13px; }
+  .later h2 { font-size: 12px; font-weight: 400; color: var(--faint); margin: 0 0 4px; }
+  .later ol { list-style: none; margin: 0; padding: 0; }
+  .later li {
+    display: grid;
+    grid-template-columns: 76px 52px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    width: 100%;
+    padding: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--rule);
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    color: inherit;
+  }
+  .later li.on { color: var(--ink); }
+  .later .t { font-size: 15px; letter-spacing: -0.02em; }
+  .later .n { font-size: 13px; color: var(--mute); }
+  .later .d { text-align: right; font-size: 13px; color: var(--mute); }
+  .later .d.late { color: var(--late); }
+  .later .quiet {
+    padding: 18px 0;
+    color: var(--mute);
+    border-top: 1px solid var(--rule);
+    font-family: var(--serif);
+    font-style: italic;
+  }
+  .composer { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--rule); }
+  .composer label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--mute);
+    margin: 14px 0 6px;
+  }
+  .field { position: relative; }
+  .field input {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 0 10px;
+    border-radius: 0;
+    font-family: var(--serif);
+    font-size: 26px;
+    letter-spacing: -0.02em;
+  }
+  .field input::placeholder { color: var(--faint); }
+  .suggest {
+    position: absolute;
+    z-index: 4;
+    left: 0; right: 0;
+    top: calc(100% - 1px);
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-top: 0;
+    max-height: 240px;
+    overflow: auto;
+  }
+  .suggest button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    font-family: var(--serif);
+    font-size: 18px;
+  }
+  .suggest button[aria-selected="true"], .suggest button:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .row-actions { display: flex; gap: 18px; align-items: center; margin-top: 16px; }
+  .go {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 16px 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .go:disabled { opacity: 0.35; cursor: default; }
+  .texty {
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--mute);
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+  .texty:hover { color: var(--ink); }
+  footer.colophon {
+    margin-top: 56px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    color: var(--faint);
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  footer a { color: var(--mute); }
+  body.display header.mast,
+  body.display .index,
+  body.display .row-actions,
+  body.display footer.colophon span:first-child { display: none; }
+  body.display { cursor: none; }
+  body.display .minute { font-size: clamp(160px, 28vh, 320px); }
+  body.display .plate { font-size: 18px; padding: 6px 10px 5px; }
+  body.display .line-name { font-size: 36px; }
+  body.display .where { font-size: 22px; }
+  body.display .sheet { padding-top: 48px; }
+  body.display .later li:nth-child(n + 3) { display: none; }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <header class="mast">
+      <div class="mark">Due</div>
+      <div class="live" id="live"><i></i><span id="clock"></span></div>
+    </header>
+    <nav class="index" id="index" aria-label="Routes"></nav>
+    <div class="spread">
+      <main id="stage"></main>
+      <aside class="later" id="later"></aside>
+    </div>
+    <footer class="colophon">
+      <span>Regional Rail. SEPTA Next to Arrive.</span>
+    </footer>
+  </div>
+<script>
+const STATIONS = ["30th Street Station","49th St","Airport Terminal A","Airport Terminal B","Airport Terminal C-D","Airport Terminal E-F","Allegheny","Allen Lane","Ambler","Angora","Ardmore","Ardsley","Bala","Berwyn","Bethayres","Bridesburg","Bristol","Bryn Mawr","Carpenter","Chalfont","Chelten Avenue","Cheltenham","Chester TC","Chestnut Hill East","Chestnut Hill West","Churchmans Crossing","Claymont","Clifton-Aldan","Colmar","Conshohocken","Cornwells Heights","Crestmont","Croydon","Crum Lynne","Curtis Park","Cynwyd","Darby","Daylesford","Delaware Valley College","Devon","Downingtown","Doylestown","East Falls","Eastwick Station","Eddington","Eddystone","Elkins Park","Elm St","Elwyn Station","Exton","Fern Rock TC","Fernwood","Folcroft","Forest Hills","Ft Washington","Fortuna","Fox Chase","Germantown","Gladstone","Glenolden","Glenside","Gravers","Gwynedd Valley","Hatboro","Haverford","Highland Ave","Highland","Holmesburg Jct","Ivy Ridge","Jefferson Station","Jenkintown-Wyncote","Langhorne","Lansdale","Lansdowne","Lawndale","Levittown","Link Belt","Main St","Malvern","Manayunk","Marcus Hook","Market East","Meadowbrook","Media","Melrose Park","Merion","Miquon","Morton","Mt Airy","Moylan-Rose Valley","Narberth","Neshaminy Falls","New Britain","Newark","Noble","Norristown TC","North Broad St","North Hills","North Philadelphia","North Wales","Norwood","Olney","Oreland","Overbrook","Paoli","Penllyn","Pennbrook","Philmont","Primos","Prospect Park","Queen Lane","Radnor","Ridley Park","Rosemont","Roslyn","Rydal","Ryers","Secane","Sedgwick","Sharon Hill","Somerton","Spring Mill","St. Davids","St. Martins","Stenton","Strafford","Suburban Station","Swarthmore","Tacony","Temple U","Thorndale","Torresdale","Trenton","Trevose","Tulpehocken","University City","Upsal","Villanova","Wallingford","Warminster","Washington Lane","Wayne Station","Wayne Jct","West Trenton","Whitford","Willow Grove","Wilmington","Wissahickon","Wissinoming","Wister","Woodbourne","Wyndmoor","Wynnefield Avenue","Wynnewood","Yardley"];
+const KEY = "baldwin-next-v1";
+const BOARD = "due-board-v1";
+function fit() {
+  const wide = window.matchMedia("(min-width: 1100px) and (min-height: 700px) and (pointer: coarse)").matches;
+  document.body.classList.remove("phone", "display");
+  document.body.classList.add(wide ? "display" : "phone");
+}
+fit();
+window.addEventListener("resize", fit);
+const state = {
+  routes: load(),
+  active: 0,
+  composing: false,
+  cache: {},
+  places: {},
+  picked: null,
+  fetching: false,
+  error: null,
+  updated: null
+};
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (Array.isArray(raw) && raw.length) return raw;
+  } catch (e) {}
+  return [{ from: "Wayne Station", to: "Suburban Station" }];
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(state.routes)); }
+function saveBoard() {
+  try { localStorage.setItem(BOARD, JSON.stringify({ cache: state.cache, places: state.places })); } catch (e) {}
+}
+try {
+  const board = JSON.parse(localStorage.getItem(BOARD) || "null");
+  if (board) { state.cache = board.cache || {}; state.places = board.places || {}; }
+} catch (e) {}
+function nyWall(date) {
+  return new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
+}
+function parseClock(str) {
+  if (!str) return null;
+  const m = String(str).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10) % 12;
+  if (m[3].toUpperCase() === "PM") h += 12;
+  const now = new Date();
+  const offset = now.getTime() - nyWall(now).getTime();
+  const wall = nyWall(now);
+  wall.setHours(h, parseInt(m[2], 10), 0, 0);
+  let result = new Date(wall.getTime() + offset);
+  if (result.getTime() < now.getTime() - 20 * 60 * 1000) {
+    wall.setDate(wall.getDate() + 1);
+    result = new Date(wall.getTime() + offset);
+  }
+  return result;
+}
+function minsUntil(date) {
+  if (!date) return null;
+  return Math.round((date.getTime() - Date.now()) / 60000);
+}
+function delayLabel(raw) {
+  if (!raw) return { text: "", late: false };
+  const s = String(raw).trim();
+  if (/on time/i.test(s)) return { text: "On time", late: false };
+  const n = s.match(/(\d+)/);
+  const mins = n ? parseInt(n[1], 10) : 0;
+  return { text: mins ? mins + " min late" : s, late: mins > 0 };
+}
+function fmtTime(date) {
+  if (!date) return "—";
+  let h = date.getHours();
+  const ap = h >= 12 ? "pm" : "am";
+  h = h % 12 || 12;
+  return h + ":" + String(date.getMinutes()).padStart(2, "0") + " " + ap;
+}
+function shortStation(name) {
+  return name.replace(" Station", "").replace("30th Street", "30th St").replace("Transportation Center", "TC");
+}
+function nta(from, to) {
+  return new Promise((resolve, reject) => {
+    const cb = "nta_" + Math.random().toString(36).slice(2, 9);
+    const s = document.createElement("script");
+    const timer = setTimeout(() => { cleanup(); reject(new Error("timeout")); }, 9000);
+    function cleanup() {
+      clearTimeout(timer);
+      try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+      s.remove();
+    }
+    window[cb] = (data) => { cleanup(); resolve(Array.isArray(data) ? data : []); };
+    s.onerror = () => { cleanup(); reject(new Error("network")); };
+    s.src = "https://www3.septa.org/hackathon/NextToArrive/?req1="
+      + encodeURIComponent(from) + "&req2=" + encodeURIComponent(to)
+      + "&req3=5&callback=" + cb;
+    document.head.appendChild(s);
+  });
+}
+function tripsFor(route) {
+  const key = route.from + "→" + route.to;
+  const rows = state.cache[key] || [];
+  return rows.map(row => {
+    const dep = parseClock(row.orig_departure_time);
+    const arr = parseClock(row.orig_arrival_time);
+    return {
+      train: row.orig_train,
+      line: row.orig_line,
+      dep, arr,
+      mins: minsUntil(dep),
+      delay: delayLabel(row.orig_delay),
+      direct: String(row.isdirect) !== "false"
+    };
+  }).filter(t => t.mins === null || t.mins > -2);
+}
+function render() { renderLive(); renderIndex(); renderStage(); renderLater(); }
+function renderLive() {
+  const el = document.getElementById("live");
+  el.className = "live" + (state.error ? " stale" : "");
+  document.getElementById("clock").textContent = state.error ? "SEPTA quiet" : "";
+}
+function renderIndex() {
+  const nav = document.getElementById("index");
+  const solo = state.routes.length < 2 && !state.composing;
+  nav.className = solo ? "index solo" : "index";
+  nav.innerHTML = "";
+  if (solo) return;
+  state.routes.forEach((r, i) => {
+    const b = document.createElement("button");
+    b.className = i === state.active && !state.composing ? "on" : "";
+    b.innerHTML = '<span class="fromto">' + esc(shortStation(r.from)) + " → " + esc(shortStation(r.to)) + '</span>';
+    b.onclick = () => { state.composing = false; state.picked = null; state.active = i; render(); refreshOne(r); };
+    nav.appendChild(b);
+  });
+  const add = document.createElement("button");
+  add.className = "add" + (state.composing ? " on" : "");
+  add.textContent = "Add a route";
+  add.onclick = () => { state.composing = true; render(); };
+  nav.appendChild(add);
+}
+function placeFor(train) {
+  return state.places[String(train).replace(/\D/g, "")] || null;
+}
+function whereLine(train) {
+  const p = placeFor(train);
+  if (!p || !p.current) return "";
+  const next = p.next ? ", next " + esc(p.next) : "";
+  return '<div class="where">At ' + esc(p.current) + next + '</div>';
+}
+function chosen(trips) {
+  if (!trips.length) return null;
+  if (state.picked) {
+    const hit = trips.find(t => String(t.train) === String(state.picked));
+    if (hit) return hit;
+  }
+  return trips[0];
+}
+function renderStage() {
+  const stage = document.getElementById("stage");
+  if (state.composing || !state.routes.length) {
+    stage.innerHTML = composerHTML(null);
+    wireComposer(null);
+    return;
+  }
+  const route = state.routes[state.active];
+  const trips = tripsFor(route);
+  const next = chosen(trips);
+  if (!next) {
+    stage.innerHTML = `
+      <div class="empty-object">
+        <p>${state.fetching ? "Asking SEPTA." : "No train on the board."}</p>
+        <small>${state.error ? "The feed did not answer. It will try again." : "Nothing scheduled between these stations right now."}</small>
+      </div>
+      <div class="stations">${esc(route.from)}<span class="to">${esc(route.to)}</span></div>
+      ${editLink(true)}`;
+    wireSwap();
+    return;
+  }
+  const gone = next.mins !== null && next.mins <= 0;
+  const minute = gone ? "Now" : (next.mins == null ? "—" : String(next.mins));
+  const unit = gone ? "" : "min";
+  const late = next.delay.late ? '<span class="sep">·</span><span class="late">' + esc(next.delay.text) + '</span>' : "";
+  stage.innerHTML = `
+    <div class="object">
+      <div class="minute ${gone ? "gone" : ""}">${esc(minute)}</div>
+      <div class="unit">${esc(unit)}</div>
+      <div class="plate">${esc(next.train)}</div>
+    </div>
+    <div class="line-name">${esc(next.line)}</div>
+    ${whereLine(next.train)}
+    <div class="facts">${esc(fmtTime(next.dep))}<span class="sep">–</span>${esc(fmtTime(next.arr))}${late}</div>
+    ${next.direct ? "" : '<div class="change">Not direct. A change is required.</div>'}
+    <div class="stations">${esc(route.from)}<span class="to">${esc(route.to)}</span></div>
+    ${editLink(state.routes.length < 2)}`;
+  wireSwap();
+}
+function renderLater() {
+  const aside = document.getElementById("later");
+  if (state.composing || !state.routes.length) { aside.innerHTML = ""; return; }
+  const trips = tripsFor(state.routes[state.active]);
+  const hero = chosen(trips);
+  const rest = trips.filter(t => !hero || t.train !== hero.train);
+  if (!rest.length) {
+    aside.innerHTML = '<h2>After that</h2><div class="quiet">Only one train on the board.</div>';
+    return;
+  }
+  aside.innerHTML = '<h2>After that</h2><ol>' + rest.map(t => {
+    const gone = t.mins !== null && t.mins <= 0;
+    return `<li data-train="${esc(t.train)}">
+      <div class="t">${esc(fmtTime(t.dep))}</div>
+      <div class="n">${esc(t.train)}</div>
+      <div class="d ${t.delay.late ? "late" : ""}">${esc(gone ? "Now" : (t.mins + " min"))}</div>
+    </li>`;
+  }).join("") + "</ol>";
+  aside.querySelectorAll("li").forEach(li => {
+    li.onclick = () => { state.picked = li.getAttribute("data-train"); render(); };
+  });
+}
+function editLink(withAdd) {
+  const add = withAdd ? '<button class="texty" id="add">Add a route</button>' : "";
+  return `<div class="row-actions"><button class="texty" id="swap">Return</button><button class="texty" id="edit">Change stations</button>${add}<button class="texty" id="drop">Remove</button></div>`;
+}
+function composerHTML(route) {
+  const from = route ? route.from : "";
+  const to = route ? route.to : "";
+  return `
+    <div class="kicker">${route ? "This route" : "A route"}</div>
+    <form class="composer" id="composer" style="border-top:0;margin-top:8px;padding-top:0">
+      <label for="from">From</label>
+      <div class="field"><input id="from" name="from" autocomplete="off" placeholder="Wayne Station" value="${esc(from)}" /></div>
+      <label for="to">To</label>
+      <div class="field"><input id="to" name="to" autocomplete="off" placeholder="Suburban Station" value="${esc(to)}" /></div>
+      <div class="row-actions">
+        <button class="go" id="go" type="submit">Show trains</button>
+        ${route || state.routes.length ? '<button class="texty" id="cancel" type="button">Cancel</button>' : ""}
+      </div>
+    </form>`;
+}
+function wireSwap() {
+  const swap = document.getElementById("swap");
+  if (swap) swap.onclick = () => {
+    const r = state.routes[state.active];
+    const tmp = r.from; r.from = r.to; r.to = tmp;
+    state.picked = null;
+    save(); render(); refreshOne(r);
+  };
+  const add = document.getElementById("add");
+  if (add) add.onclick = () => { state.composing = true; render(); };
+  const edit = document.getElementById("edit");
+  if (edit) edit.onclick = () => {
+    const stage = document.getElementById("stage");
+    const route = state.routes[state.active];
+    stage.innerHTML = composerHTML(route);
+    document.getElementById("later").innerHTML = "";
+    wireComposer(route);
+  };
+  const drop = document.getElementById("drop");
+  if (drop) drop.onclick = () => {
+    state.routes.splice(state.active, 1);
+    state.active = Math.max(0, state.active - 1);
+    save();
+    if (!state.routes.length) state.composing = true;
+    render();
+  };
+}
+function wireComposer(existing) {
+  const form = document.getElementById("composer");
+  const from = document.getElementById("from");
+  const to = document.getElementById("to");
+  attachSuggest(from);
+  attachSuggest(to);
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const a = canon(from.value), b = canon(to.value);
+    if (!a || !b || a === b) return;
+    if (existing) {
+      existing.from = a; existing.to = b;
+    } else {
+      state.routes.push({ from: a, to: b });
+      state.active = state.routes.length - 1;
+    }
+    state.composing = false;
+    save();
+    render();
+    refreshOne(state.routes[state.active]);
+  };
+  const cancel = document.getElementById("cancel");
+  if (cancel) cancel.onclick = () => { state.composing = false; render(); };
+  from.focus();
+}
+function canon(v) {
+  const q = v.trim().toLowerCase();
+  return STATIONS.find(s => s.toLowerCase() === q) || null;
+}
+function attachSuggest(input) {
+  let box = null, sel = 0, items = [];
+  function close() { if (box) { box.remove(); box = null; } }
+  function open(list) {
+    close();
+    if (!list.length) return;
+    items = list; sel = 0;
+    box = document.createElement("div");
+    box.className = "suggest";
+    box.setAttribute("role", "listbox");
+    list.forEach((name, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = name;
+      b.setAttribute("aria-selected", i === 0 ? "true" : "false");
+      b.onmousedown = (e) => { e.preventDefault(); input.value = name; close(); };
+      box.appendChild(b);
+    });
+    input.parentElement.appendChild(box);
+  }
+  function move(d) {
+    if (!box) return;
+    sel = (sel + d + items.length) % items.length;
+    [...box.children].forEach((el, i) => el.setAttribute("aria-selected", i === sel ? "true" : "false"));
+    box.children[sel].scrollIntoView({ block: "nearest" });
+  }
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 1) { close(); return; }
+    open(STATIONS.filter(s => s.toLowerCase().includes(q)).slice(0, 6));
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+    else if (e.key === "Enter" && box) { e.preventDefault(); input.value = items[sel]; close(); }
+    else if (e.key === "Escape") close();
+  });
+  input.addEventListener("blur", () => setTimeout(close, 120));
+}
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[c]));
+}
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cb = "jp_" + Math.random().toString(36).slice(2, 9);
+    const s = document.createElement("script");
+    const timer = setTimeout(() => { cleanup(); reject(new Error("timeout")); }, 9000);
+    function cleanup() {
+      clearTimeout(timer);
+      try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+      s.remove();
+    }
+    window[cb] = (data) => { cleanup(); resolve(data); };
+    s.onerror = () => { cleanup(); reject(new Error("network")); };
+    s.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cb;
+    document.head.appendChild(s);
+  });
+}
+function cleanStop(name) {
+  return String(name || "").replace(/^Gray\s+/i, "").trim();
+}
+async function refreshPlaces() {
+  try {
+    const rows = await jsonp("https://www3.septa.org/api/TrainView/index.php");
+    const places = {};
+    (Array.isArray(rows) ? rows : []).forEach(row => {
+      const id = String(row.trainno || "").replace(/\D/g, "");
+      if (!id) return;
+      places[id] = { current: cleanStop(row.currentstop), next: cleanStop(row.nextstop) };
+    });
+    state.places = places;
+    saveBoard();
+  } catch (e) {}
+}
+async function refreshOne(route) {
+  state.fetching = true; state.error = null;
+  try {
+    const rows = await nta(route.from, route.to);
+    state.cache[route.from + "→" + route.to] = rows;
+    saveBoard();
+    state.updated = new Date();
+    state.error = null;
+  } catch (e) {
+    state.error = e.message;
+  } finally {
+    state.fetching = false;
+    render();
+  }
+}
+async function refreshAll() {
+  const list = state.routes.slice();
+  await refreshPlaces();
+  for (const r of list) await refreshOne(r);
+}
+render();
+refreshAll();
+setInterval(() => { if (!state.composing) render(); }, 15000);
+setInterval(refreshAll, 30000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+</script>
+</body>
+</html>
