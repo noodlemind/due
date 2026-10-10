@@ -163,7 +163,7 @@
   .ident {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     align-self: end;
     margin-bottom: 12px;
   }
@@ -177,8 +177,10 @@
     font-weight: 500;
   }
   .track {
-    font-size: 13px;
-    letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    font-weight: 500;
     color: var(--ink);
   }
   .line-name {
@@ -338,8 +340,8 @@
   body.display { cursor: none; }
   body.display .minute { font-size: clamp(160px, 28vh, 320px); }
   body.display .plate { font-size: 18px; padding: 6px 10px 5px; }
-  body.display .track { font-size: 22px; }
-  body.display .ident { margin-bottom: 18px; gap: 16px; }
+  body.display .track { font-size: 18px; }
+  body.display .ident { margin-bottom: 18px; gap: 10px; }
   body.display .line-name { font-size: 36px; }
   body.display .where { font-size: 22px; }
   body.display .sheet { padding-top: 48px; }
@@ -552,7 +554,7 @@ function renderStage() {
     <div class="object">
       <div class="minute ${gone ? "gone" : ""}">${esc(minute)}</div>
       <div class="unit">${esc(unit)}</div>
-      <div class="ident"><div class="plate">${esc(next.train)}</div>${track ? `<div class="track">${esc(track)}</div>` : ""}</div>
+      <div class="ident"><div class="plate">${esc(next.train)}</div>${track ? `<div class="track" aria-label="Track ${esc(track)}">${esc(track)}</div>` : ""}</div>
     </div>
     <div class="line-name">${esc(next.line)}</div>
     ${whereLine(next.train)}
@@ -782,7 +784,9 @@ function readTracks(data) {
           const id = String(row.train_id || "").replace(/\D/g, "");
           if (!id) return;
           const track = trackText(row.track_change) || trackText(row.track);
-          if (track) map[id] = track;
+          if (!track) return;
+          const platform = trackText(row.platform_change) || trackText(row.platform);
+          map[id] = track + platform;
         });
       });
     });
@@ -792,8 +796,7 @@ function readTracks(data) {
 function trackLabel(route, train) {
   const map = state.tracks[route.from];
   if (!map) return "";
-  const track = map[String(train).replace(/\D/g, "")];
-  return track ? "Track " + track : "";
+  return map[String(train).replace(/\D/g, "")] || "";
 }
 const trackFlight = {};
 function pullTracks(from) {
